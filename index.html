@@ -1,0 +1,1401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NCLEX NGN AI-Powered Dynamic Exam Simulator</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- PDF.js for client-side PDF text extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <!-- Pre-load worker globally to bypass CORS and file:// protocol Web Worker errors -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .bowtie-container {
+            background: radial-gradient(circle, #f8fafc 0%, #f1f5f9 100%);
+        }
+        .scroll-custom::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .scroll-custom::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        .scroll-custom::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+        /* Hide scrollbar for clean UI but keep scroll functionality */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none; /* IE and Edge */
+            scrollbar-width: none; /* Firefox */
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen w-full flex flex-col overflow-hidden">
+
+    <header class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex flex-wrap justify-between items-center shadow-lg shrink-0 z-10">
+        <div class="flex items-center space-x-3">
+            <div class="bg-gradient-to-tr from-teal-500 to-emerald-400 text-slate-950 p-3 rounded-xl font-black text-2xl shadow-lg shadow-teal-500/20">
+                <i class="fa-solid fa-brain"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                    NCLEX-RN NGN AI Dynamic Simulator
+                </h1>
+                <p class="text-sm text-slate-400">Transform Any Nursing Material Into 10 Interactive Exam Question Types</p>
+            </div>
+        </div>
+        
+        <div class="flex items-center space-x-3 mt-3 sm:mt-0">
+            <!-- API Key Configuration Status -->
+            <button onclick="toggleSettingsModal()" class="bg-slate-800 hover:bg-slate-750 text-slate-200 px-4 py-2.5 rounded-lg border border-slate-700 transition flex items-center space-x-2 text-sm font-semibold">
+                <i class="fa-solid fa-key text-yellow-400" id="key-icon"></i>
+                <span id="api-key-status">Optional: Add API Key</span>
+            </button>
+            <button onclick="resetToGenerator()" id="new-exam-btn" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2.5 rounded-lg border border-purple-500 transition flex items-center space-x-2 text-sm font-bold shadow-lg hidden">
+                <i class="fa-solid fa-rotate-right"></i>
+                <span>New Exam</span>
+            </button>
+            <div class="bg-slate-950 px-4 py-2.5 rounded-lg border border-slate-800 flex items-center space-x-2 text-sm">
+                <span class="text-slate-500">Current Score:</span>
+                <span id="score-display" class="font-bold text-teal-400 text-base">0 / 0 pts</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 flex flex-col md:flex-row overflow-hidden relative min-h-0">
+
+        <!-- Generator Control Panel (Left column when configuring, collapsible) -->
+        <section id="generator-panel" class="w-full md:w-[35%] bg-slate-900 border-r border-slate-800 flex flex-col overflow-y-auto p-6 space-y-6 shrink-0">
+            <div class="border-b border-slate-800 pb-4">
+                <h2 class="text-base font-bold tracking-wider text-teal-400 uppercase flex items-center">
+                    <i class="fa-solid fa-sliders mr-2"></i> ExamiGen Controller
+                </h2>
+                <p class="text-sm text-slate-400 mt-1">Upload study sheets to instantly construct NGN questions.</p>
+            </div>
+
+            <!-- Material Input Area with PDF Upload Option -->
+            <div class="space-y-3">
+                <label class="block text-sm font-semibold text-slate-300 uppercase tracking-wider">Nursing Study Material / Lecture Notes</label>
+                
+                <!-- Sleek Drag & Drop PDF upload area (Now supports multiple files) -->
+                <div id="drop-zone" class="border-2 border-dashed border-slate-800 hover:border-teal-500 rounded-xl p-5 text-center cursor-pointer transition bg-slate-950/40 group">
+                    <input type="file" id="pdf-file-input" accept=".pdf" class="hidden" multiple>
+                    <i class="fa-solid fa-file-pdf text-3xl text-slate-500 group-hover:text-teal-400 transition mb-3"></i>
+                    <p class="text-xs text-slate-400 group-hover:text-slate-200 transition">Drag & Drop multiple PDFs here or <span class="text-teal-400 font-bold underline">Browse Files</span></p>
+                    <p id="pdf-status" class="text-xs text-slate-500 mt-2"></p>
+                </div>
+
+                <textarea id="material-input" class="w-full h-48 bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-slate-300 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none resize-none transition scroll-custom leading-relaxed" placeholder="Or paste your disease summary, pharmacological guidelines, fluid and electrolyte charts, or clinical guidelines here..."></textarea>
+            </div>
+
+            <!-- Configuration Dropdowns -->
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">Item Count</label>
+                    <input type="number" id="question-count" min="1" max="50" value="10" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-300 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none transition" placeholder="e.g., 10">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">Cognitive Goal</label>
+                    <select id="exam-difficulty" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-300 focus:border-teal-500 outline-none cursor-pointer">
+                        <option value="balanced" selected>Balanced NGN</option>
+                        <option value="high-yield">Slightly Harder</option>
+                        <option value="critical-only">Priority & Delegation</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Generate Button -->
+            <button onclick="triggerAiGeneration()" id="generate-btn" class="w-full bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-150 text-sm flex items-center justify-center space-x-2 mt-2">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                <span>Construct Interactive Exam</span>
+            </button>
+
+            <!-- Diagnostic Indicator -->
+            <div id="ai-status-card" class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3 hidden">
+                <div class="flex items-center justify-between">
+                    <span id="ai-status-text" class="text-sm text-teal-400 font-semibold animate-pulse">Analyzing clinical markers...</span>
+                    <i class="fa-solid fa-spinner fa-spin text-teal-400 text-sm"></i>
+                </div>
+                <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                    <div id="ai-progress-bar" class="bg-teal-500 h-full w-[10%] transition-all duration-300"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Column: Interactive Exam Environment -->
+        <section id="quiz-panel" class="flex-1 flex flex-col md:flex-row overflow-hidden bg-slate-950">
+            <!-- Empty Placeholder (Before Generation) -->
+            <div id="placeholder-view" class="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-5">
+                <div class="w-24 h-24 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 text-4xl">
+                    <i class="fa-solid fa-folder-open"></i>
+                </div>
+                <h3 class="text-xl font-semibold text-white">No Exam Active</h3>
+                <p class="text-sm text-slate-400 max-w-md leading-relaxed">
+                    Upload your nursing study materials into the controller on the left, and click <strong class="text-teal-400">"Construct Interactive Exam"</strong> to instantly generate a fully customized NGN practice test.
+                </p>
+            </div>
+
+            <!-- Dynamic Exam Shell (Hidden initially) -->
+            <div id="exam-shell" class="flex-1 flex flex-col md:flex-row overflow-hidden w-full hidden h-full min-h-0">
+                <!-- EHR (Left Viewport) -->
+                <div class="w-full md:w-[45%] bg-slate-900 border-r border-slate-800 flex flex-col h-full overflow-hidden shrink-0">
+                    <div class="bg-slate-900 border-b border-slate-800 px-5 py-4 flex items-center justify-between shrink-0">
+                        <span class="text-sm font-semibold tracking-wider text-slate-300 uppercase flex items-center">
+                            <i class="fa-solid fa-folder-open text-teal-400 mr-2"></i> Client Electronic Health Record
+                        </span>
+                        <span class="bg-teal-500/10 text-teal-400 text-xs px-3 py-1.5 rounded-full font-bold border border-teal-500/20 uppercase tracking-widest">
+                            Confidential
+                        </span>
+                    </div>
+                    
+                    <!-- EHR Tabs -->
+                    <div class="flex border-b border-slate-800 bg-slate-950 px-2 pt-2 gap-1 overflow-x-auto shrink-0 hide-scrollbar">
+                        <button onclick="switchTab('notes')" id="tab-notes" class="px-5 py-3 text-sm font-semibold rounded-t-lg transition-all duration-150 border-b-2 border-teal-500 bg-slate-900 text-white whitespace-nowrap">
+                            <i class="fa-solid fa-clipboard-user mr-1.5 text-teal-400"></i> Clinical Notes
+                        </button>
+                        <button onclick="switchTab('vitals')" id="tab-vitals" class="px-5 py-3 text-sm font-semibold rounded-t-lg transition-all duration-150 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">
+                            <i class="fa-solid fa-heart-pulse mr-1.5 text-rose-400"></i> Vital Signs / Labs
+                        </button>
+                        <button onclick="switchTab('orders')" id="tab-orders" class="px-5 py-3 text-sm font-semibold rounded-t-lg transition-all duration-150 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">
+                            <i class="fa-solid fa-file-prescription mr-1.5 text-amber-400"></i> Provider Orders
+                        </button>
+                    </div>
+
+                    <!-- EHR Contents (Scrollable independent area) -->
+                    <div class="p-6 flex-1 overflow-y-auto scroll-custom text-slate-200 text-sm leading-loose min-h-0" id="ehr-body">
+                        <!-- Loaded dynamically -->
+                    </div>
+                </div>
+
+                <!-- Exam Workspace (Right Viewport) -->
+                <div class="w-full md:w-[55%] bg-slate-950 flex flex-col h-full overflow-hidden">
+                    <!-- Scrollable Content Area -->
+                    <div class="p-6 md:p-8 flex-1 overflow-y-auto scroll-custom flex flex-col relative min-h-0">
+                        <!-- Navigator Header -->
+                        <div class="flex items-center justify-between border-b border-slate-900 pb-5 mb-6 shrink-0">
+                            <div class="flex items-center space-x-3">
+                                <span id="question-index-badge" class="bg-teal-500 text-slate-950 text-xs font-black px-3.5 py-1.5 rounded-md">
+                                    ITEM 1 OF 10
+                                </span>
+                                <span id="question-type-badge" class="bg-slate-900 text-slate-300 text-xs font-bold px-3.5 py-1.5 rounded-md border border-slate-800 uppercase tracking-wider">
+                                    Matrix / Grid Item
+                                </span>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <button onclick="prevQuestion()" class="bg-slate-900 hover:bg-slate-850 text-slate-200 p-2.5 rounded-lg transition duration-150 disabled:opacity-45" id="prev-btn">
+                                    <i class="fa-solid fa-chevron-left"></i>
+                                </button>
+                                <button onclick="nextQuestion()" class="bg-slate-900 hover:bg-slate-850 text-slate-200 p-2.5 rounded-lg transition duration-150 disabled:opacity-45" id="next-btn">
+                                    <i class="fa-solid fa-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Question Prompt -->
+                        <div class="flex-1 shrink-0">
+                            <h3 id="question-prompt" class="text-base md:text-lg font-semibold text-white mb-8 leading-relaxed">
+                                <!-- Loaded dynamically -->
+                            </h3>
+                            
+                            <div id="answer-workspace" class="mb-10">
+                                <!-- Loaded dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Rationale Section (Hidden initially) -->
+                        <div id="rationale-section" class="hidden border-t border-slate-900 pt-8 mt-6 shrink-0">
+                            <div class="bg-slate-900 border border-slate-850 rounded-xl p-6 md:p-8 shadow-xl">
+                                <div class="flex items-center space-x-2 mb-5">
+                                    <span class="text-emerald-400 text-base font-black tracking-wide">
+                                        <i class="fa-solid fa-circle-check"></i> CLINICAL EVALUATION & RATIONALE
+                                    </span>
+                                </div>
+                                <div id="rationale-grade-badge" class="mb-5"></div>
+                                <div class="space-y-6 text-sm text-slate-300 leading-relaxed">
+                                    <div>
+                                        <span class="font-bold text-white block mb-2 text-base">Concept Overview</span>
+                                        <p id="rationale-overview" class="text-sm"></p>
+                                    </div>
+                                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-5 pt-2">
+                                        <div class="bg-emerald-950/10 border border-emerald-900/20 p-5 rounded-xl">
+                                            <span class="font-bold text-emerald-400 block mb-2 text-sm"><i class="fa-solid fa-check mr-1.5"></i> Correct Options Rationale</span>
+                                            <p id="rationale-correct" class="text-sm leading-relaxed"></p>
+                                        </div>
+                                        <div class="bg-rose-950/10 border border-rose-900/20 p-5 rounded-xl">
+                                            <span class="font-bold text-rose-400 block mb-2 text-sm"><i class="fa-solid fa-xmark mr-1.5"></i> Incorrect Options Rationale</span>
+                                            <p id="rationale-incorrect" class="text-sm leading-relaxed"></p>
+                                        </div>
+                                    </div>
+                                    <div class="border-t border-slate-800 pt-5 mt-4">
+                                        <span class="font-bold text-teal-400 block mb-2 text-sm"><i class="fa-solid fa-lightbulb mr-1.5"></i> Educational Objective</span>
+                                        <p id="rationale-objective" class="text-slate-200 italic text-sm"></p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- AI Tutor Interactive Chat Box -->
+                            <div class="bg-slate-900 border border-slate-850 rounded-xl p-6 md:p-8 shadow-xl mt-6">
+                                <div class="flex items-center space-x-3 mb-5 border-b border-slate-800 pb-4">
+                                    <span class="text-indigo-400 text-base font-black tracking-wide">
+                                        <i class="fa-solid fa-chalkboard-user"></i> AI TUTOR Q&A
+                                    </span>
+                                    <span class="text-xs text-slate-500 bg-slate-950 px-2.5 py-1 rounded border border-slate-800">Ask about this item</span>
+                                </div>
+                                <div id="tutor-chat-history" class="space-y-5 mb-5 max-h-72 overflow-y-auto scroll-custom text-sm pr-3">
+                                    <!-- Messages load here -->
+                                </div>
+                                <div class="flex items-end space-x-3">
+                                    <textarea id="tutor-question-input" rows="2" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-none transition scroll-custom leading-relaxed" placeholder="Confused about the rationale? Ask the AI tutor to explain in English..."></textarea>
+                                    <button onclick="askTutor()" id="ask-tutor-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 h-[68px] rounded-xl text-sm font-bold transition flex items-center justify-center shadow-lg w-28 shrink-0">
+                                        <i class="fa-solid fa-paper-plane mr-2"></i> Ask
+                                    </button>
+                                </div>
+                            </div>
+
+                        </div>
+
+                    </div>
+                    
+                    <!-- Quick Navigator Bar (Fixed at Bottom) -->
+                    <footer class="bg-slate-950 border-t border-slate-900 p-5 flex justify-between items-center flex-wrap gap-4 shrink-0 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.3)]">
+                        <div class="flex flex-wrap gap-2 max-h-28 overflow-y-auto scroll-custom" id="quick-navigator">
+                            <!-- Nav buttons loaded dynamically -->
+                        </div>
+                        <button id="submit-exam-btn" class="bg-teal-500 hover:bg-teal-400 text-slate-950 font-black px-6 py-3 rounded-xl transition duration-150 text-sm shadow-lg shadow-teal-500/10">
+                            <i class="fa-solid fa-paper-plane mr-2"></i> SUBMIT EXAM
+                        </button>
+                    </footer>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- API Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-slate-950/80 flex items-center justify-center z-50 hidden p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-8 shadow-2xl space-y-5">
+            <div class="flex items-center space-x-3 text-yellow-400 text-lg font-bold">
+                <i class="fa-solid fa-gear"></i>
+                <span>Google Gemini API Configuration</span>
+            </div>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                If you are running this locally, enter your personal Google Gemini API key.
+                You can obtain a **free** key from <a href="https://aistudio.google.com/" target="_blank" class="text-teal-400 hover:underline">Google AI Studio <i class="fa-solid fa-up-right-from-square text-xs"></i></a>. If running in Canvas, you may leave this blank.
+            </p>
+            <div class="space-y-2">
+                <label class="block text-xs uppercase tracking-wider font-bold text-slate-400">Gemini API Key</label>
+                <input type="password" id="api-key-input" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-teal-500 outline-none" placeholder="AIzaSy...">
+            </div>
+            <div class="flex justify-end space-x-3 pt-4">
+                <button onclick="toggleSettingsModal()" class="bg-slate-850 hover:bg-slate-800 text-slate-300 text-sm px-5 py-2.5 rounded-xl transition font-medium">Cancel</button>
+                <button onclick="saveApiKey()" class="bg-teal-500 hover:bg-teal-400 text-slate-950 text-sm font-bold px-5 py-2.5 rounded-xl transition shadow-md">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal Overlay -->
+    <div id="custom-modal" class="fixed inset-0 bg-slate-950/90 flex items-center justify-center z-50 hidden p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-8 shadow-2xl space-y-5">
+            <div class="flex items-center space-x-3 text-teal-400 text-lg font-bold" id="modal-title-area">
+                <i class="fa-solid fa-circle-question"></i>
+                <span id="modal-title">Confirm Action</span>
+            </div>
+            <p id="modal-text" class="text-sm text-slate-300 leading-relaxed"></p>
+            <div class="flex justify-end space-x-3 pt-4" id="modal-buttons">
+                <!-- Buttons injected dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentQuestionIdx = 0;
+        let examQuestions = [];
+        let userAnswers = {};
+        let currentEhrTab = 'notes';
+        let examSubmitted = false;
+        let hiddenPdfText = ""; // Stores extracted PDF text in the background
+        let tutorChatHistories = {}; // 新增：用於儲存每一題的專屬聊天紀錄
+
+        // --- API Retry Helper ---
+        async function fetchWithRetry(url, options, maxRetries = 5) {
+            const delays = [1000, 2000, 4000, 8000, 16000];
+            for (let i = 0; i <= maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    
+                    if (response.ok) {
+                        return response;
+                    }
+                    
+                    if (i === maxRetries || (response.status !== 503 && response.status !== 429 && response.status >= 400 && response.status < 500)) {
+                        if (response.status === 503) {
+                            throw new Error(`API returned status 503 (Service Unavailable) after ${maxRetries} retries.`);
+                        }
+                        throw new Error(`API returned status ${response.status}`);
+                    }
+                    
+                    console.log(`API response ${response.status}. Retrying in ${delays[i]}ms...`);
+                } catch (error) {
+                    if (i === maxRetries) {
+                        throw error;
+                    }
+                    console.log(`Network/Fetch error. Retrying in ${delays[i]}ms...`);
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, delays[i]));
+            }
+        }
+
+        // Initialization
+        window.onload = function() {
+            loadSavedApiKey();
+            setupPdfUploader();
+        };
+
+        function setupPdfUploader() {
+            const dropZone = document.getElementById('drop-zone');
+            const pdfInput = document.getElementById('pdf-file-input');
+            const pdfStatus = document.getElementById('pdf-status');
+            const materialInput = document.getElementById('material-input');
+
+            dropZone.addEventListener('click', () => pdfInput.click());
+            
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('border-teal-500', 'bg-teal-950/10');
+            });
+
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('border-teal-500', 'bg-teal-950/10');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-teal-500', 'bg-teal-950/10');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    const pdfFiles = Array.from(files).filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+                    if (pdfFiles.length > 0) {
+                        processPdfFiles(pdfFiles);
+                    } else {
+                        showModal("Invalid Files", "Please drop valid PDF files.");
+                    }
+                }
+            });
+
+            pdfInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    const pdfFiles = Array.from(e.target.files).filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+                    if (pdfFiles.length > 0) {
+                        processPdfFiles(pdfFiles);
+                    }
+                }
+            });
+
+            async function processPdfFiles(files) {
+                pdfStatus.innerText = `Preparing ${files.length} file(s)...`;
+                pdfStatus.className = "text-xs text-teal-400 font-semibold animate-pulse";
+                materialInput.value = "";
+                materialInput.placeholder = "Reading files sequentially, please do not close the window...";
+
+                let allExtractedText = '';
+
+                for (let fIdx = 0; fIdx < files.length; fIdx++) {
+                    const file = files[fIdx];
+                    pdfStatus.innerText = `[File ${fIdx + 1}/${files.length}] Extracting: ${file.name}...`;
+                    
+                    try {
+                        const arrayBuffer = await file.arrayBuffer();
+                        
+                        const pdf = await pdfjsLib.getDocument({ 
+                            data: arrayBuffer,
+                            cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
+                            cMapPacked: true
+                        }).promise;
+                        
+                        allExtractedText += `=========================================\n`;
+                        allExtractedText += `--- SOURCE FILE: ${file.name} ---\n`;
+                        allExtractedText += `=========================================\n\n`;
+
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            pdfStatus.innerText = `[File ${fIdx + 1}/${files.length}] ${file.name} - Page ${i} / ${pdf.numPages}`;
+                            const page = await pdf.getPage(i);
+                            const textContent = await page.getTextContent();
+                            const pageText = textContent.items.map(item => item.str).join(' ');
+                            allExtractedText += `--- Page ${i} ---\n` + pageText + '\n\n';
+                        }
+                        allExtractedText += `\n\n`;
+                    } catch (err) {
+                        console.error(`Error reading ${file.name}:`, err);
+                        allExtractedText += `=========================================\n`;
+                        allExtractedText += `--- ERROR EXTRACTING FROM: ${file.name} ---\n`;
+                        allExtractedText += `=========================================\n\n`;
+                        showModal("Extraction Error", `Could not read text from ${file.name}. It may be encrypted or corrupted.`);
+                    }
+                }
+
+                hiddenPdfText = allExtractedText; // Store extracted text in background
+                materialInput.value = ""; // Keep the text area empty
+                pdfStatus.innerText = `Success! Compiled text from ${files.length} file(s).`;
+                pdfStatus.className = "text-xs text-emerald-400 font-bold";
+                materialInput.placeholder = "PDF(s) loaded successfully! You can type additional instructions or paste more text here...";
+            }
+        }
+
+        function loadSavedApiKey() {
+            const key = localStorage.getItem('gemini_api_key');
+            if (key) {
+                document.getElementById('api-key-input').value = key;
+                updateApiKeyStatus(true);
+            } else {
+                updateApiKeyStatus(false);
+            }
+        }
+
+        function updateApiKeyStatus(configured) {
+            const statusEl = document.getElementById('api-key-status');
+            const iconEl = document.getElementById('key-icon');
+            if (configured) {
+                statusEl.innerText = "Gemini Connected";
+                statusEl.className = "text-emerald-400 font-bold";
+                iconEl.className = "fa-solid fa-circle-check text-emerald-400";
+            } else {
+                statusEl.innerText = "Optional: Add API Key";
+                statusEl.className = "text-yellow-400 font-bold";
+                iconEl.className = "fa-solid fa-key text-yellow-400";
+            }
+        }
+
+        function toggleSettingsModal() {
+            const el = document.getElementById('settings-modal');
+            el.classList.toggle('hidden');
+        }
+
+        function saveApiKey() {
+            const key = document.getElementById('api-key-input').value.trim();
+            if (key) {
+                localStorage.setItem('gemini_api_key', key);
+                updateApiKeyStatus(true);
+                toggleSettingsModal();
+                showModal("Key Saved", "Your Gemini API key has been stored locally. You can now generate exams dynamically.");
+            } else {
+                localStorage.removeItem('gemini_api_key');
+                updateApiKeyStatus(false);
+                showModal("Key Removed", "API Key cleared. It will now default to the environment's connection.");
+            }
+        }
+
+        // Generation Logic
+        async function triggerAiGeneration() {
+            const storedKey = localStorage.getItem('gemini_api_key');
+            const apiKey = storedKey || "";
+            // FIX applied: Safely use the correct public model when user inputs their own API key.
+            const modelName = storedKey ? "gemini-1.5-flash" : "gemini-2.5-flash-preview-09-2025";
+
+            let manualText = document.getElementById('material-input').value.trim();
+            let material = hiddenPdfText ? (hiddenPdfText + "\n\n" + manualText).trim() : manualText;
+            
+            if (!material) {
+                showModal("Material Missing", "Please paste or load study notes into the left area to build your customized test.");
+                return;
+            }
+
+            const count = parseInt(document.getElementById('question-count').value);
+            if (isNaN(count) || count < 1) {
+                showModal("Invalid Question Count", "Please enter a valid number of questions (minimum 1).");
+                return;
+            }
+            if (count > 50) {
+                showModal("Question Limit", "To ensure high-quality NGN generation and prevent API connection timeouts, please limit to a maximum of 50 questions per generation.");
+                return;
+            }
+
+            const difficulty = document.getElementById('exam-difficulty').value;
+
+            // Show diagnostics
+            const statusCard = document.getElementById('ai-status-card');
+            const progressBar = document.getElementById('ai-progress-bar');
+            const statusText = document.getElementById('ai-status-text');
+            const generateBtn = document.getElementById('generate-btn');
+
+            statusCard.classList.remove('hidden');
+            generateBtn.disabled = true;
+            generateBtn.classList.add('opacity-50');
+
+            try {
+                progressBar.style.width = "20%";
+                statusText.innerText = "Formatting clinical guidelines...";
+
+                const systemPrompt = `You are a top-tier Senior Nurse Educator and expert NGN item writer. 
+Analyze the provided material and construct exactly ${count} realistic, challenging Next Generation NCLEX (NGN) exam questions.
+Your output must be absolutely compliant with current NCSBN test formats and UWorld/Archer style.
+
+CRITICAL INSTRUCTIONS:
+- You must output raw JSON only, strictly matching the response schema. 
+- Do not output any markdown code block wraps like \`\`\`json. Return only a raw JSON array.
+- ABSOLUTELY NO raw newlines or unescaped control characters in JSON strings. Use <br> for line breaks.
+- No traditional single-response multiple-choice questions are allowed. You must distribute among these formats:
+  - "matrix" (Rows are evaluated as Anticipated, Contraindicated, or Non-essential)
+  - "sata" (Select All That Apply with multiple responses, using true/false values to mark options)
+  - "select_n" (Select exactly N options)
+  - "fill_blank" (Medication/clinical calculation with clean whole numbers/decimals)
+  - "ordered_response" (Sequencing of procedures)
+  - "bowtie" (Actions to Take, Primary Condition, Parameters to Monitor)
+  - "trend" (Simulated via drop-downs tracking changing clinical shifts)
+  - "dropdown" (Interactive cloze drop-down)
+  - "highlight" (Sentences of a note that are either critical/isRedFlag: true or normal/isRedFlag: false)
+
+JSON Array Structure:
+[
+  {
+    "id": 1,
+    "type": "matrix" | "sata" | "select_n" | "fill_blank" | "ordered_response" | "bowtie" | "trend" | "dropdown" | "highlight",
+    "section": "Topic Name",
+    "badge": "Clinical Item Label",
+    "scenario": {
+      "notes": "HTML-formatted (use <br>, <strong>, etc.) nurse shift logs or admission history",
+      "vitals": "HTML-formatted vitals & lab results showing reference ranges",
+      "orders": "HTML-formatted provider order sets"
+    },
+    "prompt": "Highly detailed clinical query prompt.",
+    "multiple_choice": { "options": ["A", "B", "C", "D"], "correct": 0 },
+    "matrix": { "rows": ["Row A", "Row B", "Row C"], "columns": ["Anticipated", "Contraindicated", "Non-essential"], "correct": [0, 1, 2] },
+    "sata": { "options": ["Opt 1", "Opt 2", "Opt 3", "Opt 4", "Opt 5"], "correct": [true, false, true, true, false] },
+    "select_n": { "n": 3, "options": ["Opt 1", "Opt 2", "Opt 3", "Opt 4"], "correct": [0, 2, 3] },
+    "fill_blank": { "correct_answer": "150", "unit": "P/F ratio" },
+    "ordered_response": { "items": ["Step 1", "Step 2", "Step 3"], "correct_order": [2, 0, 1] },
+    "bowtie": { "actions": ["Act 1", "Act 2", "Act 3", "Act 4"], "conditions": ["Cond 1", "Cond 2", "Cond 3"], "monitors": ["Mon 1", "Mon 2", "Mon 3", "Mon 4"], "correct": { "actions": [0, 2], "condition": 1, "monitors": [0, 1] } },
+    "dropdown": { "text": "The patient is showing indicators of [Drop-down 1] and must be [Drop-down 2].", "menus": [["Option A", "Option B"], ["Option C", "Option D"]], "correct": [0, 1] },
+    "highlight": { "segments": [{"text": "Sentence A.", "isRedFlag": true}, {"text": "Sentence B.", "isRedFlag": false}], "correct": [0] },
+    "rationale": {
+      "overview": "Detailed physiological overview.",
+      "correct": "Why choices are accurate.",
+      "incorrect": "Why alternatives are incorrect.",
+      "objective": "One-line UWorld style high-yield takeaway."
+    }
+  }
+]`;
+
+                progressBar.style.width = "40%";
+                statusText.innerText = "Querying Google Gemini API...";
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+                // FIX applied: separated the systemInstruction payload properly to avoid 400 Bad Request
+                const rawResponse = await fetchWithRetry(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        systemInstruction: {
+                            parts: [{ text: systemPrompt }]
+                        },
+                        contents: [{
+                            parts: [{ text: `Target Clinical Material:\n${material}` }]
+                        }],
+                        generationConfig: {
+                            responseMimeType: "application/json"
+                        }
+                    })
+                });
+
+                if (!rawResponse.ok) {
+                    throw new Error(`API returned status ${rawResponse.status}`);
+                }
+
+                progressBar.style.width = "75%";
+                statusText.innerText = "Processing clinical scenarios...";
+
+                const apiData = await rawResponse.json();
+                let jsonText = apiData.candidates[0].content.parts[0].text;
+                
+                jsonText = jsonText.trim();
+                if (jsonText.startsWith("```json")) jsonText = jsonText.substring(7);
+                if (jsonText.startsWith("```")) jsonText = jsonText.substring(3);
+                if (jsonText.endsWith("```")) jsonText = jsonText.substring(0, jsonText.length - 3);
+                
+                jsonText = jsonText.replace(/[\x00-\x1F\x7F-\x9F]/g, ' ');
+                jsonText = jsonText.trim();
+
+                try {
+                    examQuestions = JSON.parse(jsonText);
+                } catch (parseError) {
+                    console.error("Raw JSON Text that failed parsing:", jsonText);
+                    throw new Error("AI generated malformed JSON data. Please try generating again.");
+                }
+
+                userAnswers = {};
+                examSubmitted = false;
+                currentQuestionIdx = 0;
+                
+                progressBar.style.width = "100%";
+                statusText.innerText = "Compiling visual workspace...";
+
+                setTimeout(() => {
+                    document.getElementById('placeholder-view').classList.add('hidden');
+                    document.getElementById('exam-shell').classList.remove('hidden');
+                    document.getElementById('generator-panel').classList.add('hidden');
+                    document.getElementById('new-exam-btn').classList.remove('hidden');
+                    statusCard.classList.add('hidden');
+                    generateBtn.disabled = false;
+                    generateBtn.classList.remove('opacity-50');
+
+                    loadQuestion(0);
+                    updateScoreDisplay();
+                }, 500);
+
+            } catch (error) {
+                console.error(error);
+                statusCard.classList.add('hidden');
+                generateBtn.disabled = false;
+                generateBtn.classList.remove('opacity-50');
+                showModal("Generation Failed", "Could not build the dynamic exam. Error: " + error.message);
+            }
+        }
+
+        function loadQuestion(idx) {
+            currentQuestionIdx = idx;
+            const q = examQuestions[idx];
+
+            document.getElementById('question-index-badge').innerText = `ITEM ${idx + 1} OF ${examQuestions.length}`;
+            document.getElementById('question-type-badge').innerText = q.badge || q.type;
+            document.getElementById('question-prompt').innerHTML = q.prompt;
+
+            loadEhr(q.scenario);
+            renderAnswerWorkspace(q);
+            renderNavigator();
+
+            document.getElementById('prev-btn').disabled = idx === 0;
+            document.getElementById('next-btn').disabled = idx === examQuestions.length - 1;
+
+            const rationaleSec = document.getElementById('rationale-section');
+            if (examSubmitted) {
+                rationaleSec.classList.remove('hidden');
+                displayRationale(q);
+                renderTutorChat(q.id);
+            } else {
+                rationaleSec.classList.add('hidden');
+            }
+        }
+
+        function loadEhr(scenario) {
+            const ehrBody = document.getElementById('ehr-body');
+            const placeholder = "<div class='text-slate-500 italic'>No records documented.</div>";
+            
+            if (currentEhrTab === 'notes') {
+                ehrBody.innerHTML = `<div class="bg-slate-950 p-5 rounded-xl border border-slate-800 text-sm leading-relaxed">${scenario.notes || placeholder}</div>`;
+            } else if (currentEhrTab === 'vitals') {
+                ehrBody.innerHTML = `<div class="bg-slate-950 p-5 rounded-xl border border-slate-800 text-sm leading-relaxed">${scenario.vitals || placeholder}</div>`;
+            } else {
+                ehrBody.innerHTML = `<div class="bg-slate-950 p-5 rounded-xl border border-slate-800 text-sm leading-relaxed">${scenario.orders || placeholder}</div>`;
+            }
+        }
+
+        function switchTab(tab) {
+            currentEhrTab = tab;
+            ['notes', 'vitals', 'orders'].forEach(t => {
+                const el = document.getElementById(`tab-${t}`);
+                if (t === tab) {
+                    el.className = "px-5 py-3 text-sm font-semibold rounded-t-lg transition-all duration-150 border-b-2 border-teal-500 bg-slate-900 text-white whitespace-nowrap";
+                } else {
+                    el.className = "px-5 py-3 text-sm font-semibold rounded-t-lg transition-all duration-150 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap";
+                }
+            });
+            loadEhr(examQuestions[currentQuestionIdx].scenario);
+        }
+
+        function renderAnswerWorkspace(q) {
+            const ws = document.getElementById('answer-workspace');
+            ws.innerHTML = '';
+            const ans = userAnswers[q.id];
+
+            if (q.type === 'matrix') {
+                let table = `<div class="overflow-x-auto scroll-custom rounded-xl border border-slate-800 bg-slate-950/40">
+                    <table class="w-full text-sm text-left text-slate-300">
+                        <thead class="text-xs uppercase bg-slate-900 text-slate-400 border-b border-slate-800">
+                            <tr>
+                                <th class="px-6 py-4 w-1/2">Intervention / Action</th>`;
+                q.matrix.columns.forEach(col => {
+                    table += `<th class="px-6 py-4 text-center">${col}</th>`;
+                });
+                table += `</tr></thead><tbody>`;
+
+                q.matrix.rows.forEach((row, rIdx) => {
+                    table += `<tr class="border-b border-slate-900 hover:bg-slate-900/30">
+                        <td class="px-6 py-5 font-medium text-slate-200 leading-relaxed">${row}</td>`;
+                    q.matrix.columns.forEach((col, cIdx) => {
+                        const checked = ans && ans[rIdx] === cIdx ? 'checked' : '';
+                        const disabled = examSubmitted ? 'disabled' : '';
+                        
+                        let borderStyle = "";
+                        if (examSubmitted) {
+                            const isCorrectChoice = q.matrix.correct[rIdx] === cIdx;
+                            const isUserChoice = ans && ans[rIdx] === cIdx;
+                            if (isCorrectChoice) borderStyle = "border-2 border-emerald-500 bg-emerald-950/40 shadow-[inset_0_0_12px_rgba(16,185,129,0.35)]";
+                            else if (isUserChoice) borderStyle = "border-2 border-rose-500 bg-rose-950/40";
+                        }
+
+                        table += `<td class="px-6 py-5 text-center transition-all ${borderStyle}">
+                            <input type="radio" name="matrix-row-${rIdx}" value="${cIdx}" onclick="saveMatrixAnswer(${q.id}, ${rIdx}, ${cIdx})" ${checked} ${disabled} class="w-5 h-5 text-teal-500 bg-slate-850 border-slate-750 focus:ring-teal-500 cursor-pointer">
+                        </td>`;
+                    });
+                    table += `</tr>`;
+                });
+                table += `</tbody></table></div>`;
+                ws.innerHTML = table;
+
+            } else if (q.type === 'sata') {
+                let list = `<div class="space-y-4">`;
+                q.sata.options.forEach((opt, oIdx) => {
+                    const checked = ans && ans.includes(oIdx) ? 'checked' : '';
+                    const disabled = examSubmitted ? 'disabled' : '';
+                    
+                    let gradeStyle = "bg-slate-900/40 border border-slate-850";
+                    if (examSubmitted) {
+                        const shouldBeChecked = q.sata.correct[oIdx];
+                        const wasChecked = ans && ans.includes(oIdx);
+                        if (shouldBeChecked) gradeStyle = "bg-emerald-950/20 border-2 border-emerald-500 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.25)] font-medium";
+                        else if (wasChecked) gradeStyle = "bg-rose-950/20 border-2 border-rose-500 text-rose-300 font-medium";
+                    }
+
+                    list += `<label class="flex items-start p-5 rounded-xl transition hover:bg-slate-900/20 ${gradeStyle} ${examSubmitted ? '' : 'cursor-pointer'}">
+                        <input type="checkbox" onchange="saveSataAnswer(${q.id}, ${oIdx})" ${checked} ${disabled} class="mt-1 w-5 h-5 rounded text-teal-500 bg-slate-850 border-slate-750 focus:ring-teal-500 cursor-pointer">
+                        <span class="ml-4 text-sm text-slate-200 leading-relaxed">${opt}</span>
+                    </label>`;
+                });
+                list += `</div>`;
+                ws.innerHTML = list;
+
+            } else if (q.type === 'select_n') {
+                let list = `<div class="mb-3 text-sm text-amber-400 font-semibold"><i class="fa-solid fa-circle-info mr-1.5"></i> Choose exactly ${q.select_n.n} interventions.</div>`;
+                list += `<div class="space-y-4">`;
+                q.select_n.options.forEach((opt, oIdx) => {
+                    const checked = ans && ans.includes(oIdx) ? 'checked' : '';
+                    const disabled = examSubmitted ? 'disabled' : '';
+                    
+                    let gradeStyle = "bg-slate-900/40 border border-slate-850";
+                    if (examSubmitted) {
+                        const shouldBeChecked = q.select_n.correct.includes(oIdx);
+                        const wasChecked = ans && ans.includes(oIdx);
+                        if (shouldBeChecked) gradeStyle = "bg-emerald-950/20 border-2 border-emerald-500 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.25)] font-medium";
+                        else if (wasChecked) gradeStyle = "bg-rose-950/20 border-2 border-rose-500 text-rose-300 font-medium";
+                    }
+
+                    list += `<label class="flex items-start p-5 rounded-xl transition hover:bg-slate-900/20 ${gradeStyle} ${examSubmitted ? '' : 'cursor-pointer'}">
+                        <input type="checkbox" onchange="saveSelectNAnswer(${q.id}, ${oIdx}, ${q.select_n.n})" ${checked} ${disabled} class="mt-1 w-5 h-5 rounded text-teal-500 bg-slate-850 border-slate-750 focus:ring-teal-500 cursor-pointer">
+                        <span class="ml-4 text-sm text-slate-200 leading-relaxed">${opt}</span>
+                    </label>`;
+                });
+                list += `</div>`;
+                ws.innerHTML = list;
+
+            } else if (q.type === 'fill_blank') {
+                const val = ans !== undefined ? ans : '';
+                const disabled = examSubmitted ? 'readonly' : '';
+                let borderStyle = "border-slate-800 focus:border-teal-500 focus:ring-teal-500";
+                
+                if (examSubmitted) {
+                    const isCorrect = String(ans).trim() === q.fill_blank.correct_answer;
+                    borderStyle = isCorrect ? "border-2 border-emerald-500 bg-emerald-950/20 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.25)]" : "border-2 border-rose-500 bg-rose-950/20 text-rose-300";
+                }
+
+                let box = `<div class="bg-slate-900/40 border border-slate-850 p-6 rounded-xl max-w-md">
+                    <label class="block text-xs text-slate-400 font-bold mb-3 uppercase">Type Calculated Value:</label>
+                    <div class="flex items-center space-x-3">
+                        <input type="text" oninput="saveFillBlankAnswer(${q.id}, this.value)" value="${val}" ${disabled} class="bg-slate-950 text-white rounded-lg px-4 py-3 text-sm w-48 font-bold border ${borderStyle} outline-none transition-all">
+                        <span class="text-xs text-slate-300 font-bold uppercase bg-slate-850 px-3 py-2.5 rounded-md border border-slate-850">${q.fill_blank.unit}</span>
+                    </div>`;
+                if (examSubmitted) {
+                    box += `<div class="mt-4 text-sm font-semibold text-emerald-400"><i class="fa-solid fa-circle-check mr-1.5"></i> Answer Key: ${q.fill_blank.correct_answer}</div>`;
+                }
+                box += `</div>`;
+                ws.innerHTML = box;
+
+            } else if (q.type === 'ordered_response') {
+                if (!ans) {
+                    userAnswers[q.id] = [...q.ordered_response.items.keys()];
+                }
+                const currentOrder = userAnswers[q.id];
+
+                let listHtml = `<div class="mb-3 text-sm text-amber-400 font-semibold"><i class="fa-solid fa-arrows-up-down mr-1.5"></i> Order actions from first to last using sequencing steps.</div>`;
+                listHtml += `<div class="space-y-3">`;
+                
+                currentOrder.forEach((itemIdx, seqIdx) => {
+                    const itemText = q.ordered_response.items[itemIdx];
+                    let borderStyle = "border-slate-850 bg-slate-900/60";
+                    
+                    if (examSubmitted) {
+                        const isCorrectPosition = q.ordered_response.correct_order[seqIdx] === itemIdx;
+                        borderStyle = isCorrectPosition ? "border-2 border-emerald-500 bg-emerald-950/20 shadow-[0_0_12px_rgba(16,185,129,0.25)] font-medium" : "border-2 border-rose-500 bg-rose-950/20 font-medium";
+                    }
+
+                    listHtml += `<div class="flex items-center justify-between p-4 rounded-xl border ${borderStyle} transition-all">
+                        <div class="flex items-center space-x-4">
+                            <span class="bg-slate-800 text-slate-200 text-sm font-bold w-8 h-8 flex items-center justify-center rounded-full shrink-0">${seqIdx + 1}</span>
+                            <span class="text-sm text-slate-300 leading-relaxed">${itemText}</span>
+                        </div>`;
+                    
+                    if (!examSubmitted) {
+                        listHtml += `<div class="flex items-center space-x-1.5 shrink-0 ml-4">
+                            <button onclick="moveOrder(${q.id}, ${seqIdx}, -1)" class="bg-slate-800 hover:bg-slate-750 text-slate-300 p-2 rounded-lg border border-slate-700 transition"><i class="fa-solid fa-chevron-up text-xs"></i></button>
+                            <button onclick="moveOrder(${q.id}, ${seqIdx}, 1)" class="bg-slate-800 hover:bg-slate-750 text-slate-300 p-2 rounded-lg border border-slate-700 transition"><i class="fa-solid fa-chevron-down text-xs"></i></button>
+                        </div>`;
+                    }
+                    listHtml += `</div>`;
+                });
+                listHtml += `</div>`;
+                ws.innerHTML = listHtml;
+
+            } else if (q.type === 'bowtie') {
+                let bowtieHtml = `
+                <div class="bowtie-container p-6 rounded-2xl border border-slate-800 text-slate-800 shadow-inner mb-6">
+                    <p class="text-xs font-bold text-slate-500 text-center uppercase tracking-widest mb-6">Interactive Bow-tie Workspace</p>
+                    <div class="flex flex-col lg:flex-row items-stretch justify-between gap-5">
+                        
+                        <!-- Actions to Take -->
+                        <div class="flex-1 bg-white border border-slate-200 p-5 rounded-xl shadow-sm">
+                            <span class="text-xs font-bold text-teal-600 block mb-4 uppercase tracking-wider border-b pb-2"><i class="fa-solid fa-gears"></i> Actions (Pick 2)</span>
+                            <div class="space-y-3">`;
+                q.bowtie.actions.forEach((act, idx) => {
+                    const isSelected = ans && ans.actions && ans.actions.includes(idx);
+                    const isCorrect = q.bowtie.correct.actions.includes(idx);
+                    let btnStyle = isSelected ? 'bg-teal-500 text-white border border-teal-500' : 'bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100';
+                    if (examSubmitted) {
+                        if (isCorrect) btnStyle = 'bg-emerald-600 text-white border-2 border-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.5)] font-bold';
+                        else if (isSelected) btnStyle = 'bg-rose-600 text-white border-2 border-rose-400 font-bold';
+                        else btnStyle = 'bg-slate-100 text-slate-400 border border-slate-200 opacity-60';
+                    }
+                    bowtieHtml += `<button onclick="toggleBowtieSelection(${q.id}, 'actions', ${idx})" ${examSubmitted ? 'disabled' : ''} class="w-full text-left text-sm p-3 rounded-xl font-medium transition duration-150 leading-relaxed ${btnStyle}">${act}</button>`;
+                });
+                bowtieHtml += `</div></div>
+
+                        <!-- Primary Condition -->
+                        <div class="flex-1 bg-teal-50/50 border border-teal-100 p-5 rounded-xl shadow-sm flex flex-col justify-between">
+                            <div>
+                                <span class="text-xs font-bold text-slate-800 block mb-4 uppercase tracking-wider border-b pb-2 text-center"><i class="fa-solid fa-circle-exclamation"></i> Condition (Pick 1)</span>
+                                <div class="space-y-3">`;
+                q.bowtie.conditions.forEach((cond, idx) => {
+                    const isSelected = ans && ans.condition === idx;
+                    const isCorrect = q.bowtie.correct.condition === idx;
+                    let btnStyle = isSelected ? 'bg-teal-500 text-white border border-teal-500' : 'bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100';
+                    if (examSubmitted) {
+                        if (isCorrect) btnStyle = 'bg-emerald-600 text-white border-2 border-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.5)] font-bold';
+                        else if (isSelected) btnStyle = 'bg-rose-600 text-white border-2 border-rose-400 font-bold';
+                        else btnStyle = 'bg-slate-100 text-slate-400 border border-slate-200 opacity-60';
+                    }
+                    bowtieHtml += `<button onclick="setBowtieCondition(${q.id}, ${idx})" ${examSubmitted ? 'disabled' : ''} class="w-full text-center text-sm p-3 rounded-xl font-medium transition duration-150 leading-relaxed ${btnStyle}">${cond}</button>`;
+                });
+                bowtieHtml += `</div></div></div>
+
+                        <!-- Parameters to Monitor -->
+                        <div class="flex-1 bg-white border border-slate-200 p-5 rounded-xl shadow-sm">
+                            <span class="text-xs font-bold text-indigo-600 block mb-4 uppercase tracking-wider border-b pb-2"><i class="fa-solid fa-chart-line"></i> Monitor (Pick 2)</span>
+                            <div class="space-y-3">`;
+                q.bowtie.monitors.forEach((mon, idx) => {
+                    const isSelected = ans && ans.monitors && ans.monitors.includes(idx);
+                    const isCorrect = q.bowtie.correct.monitors.includes(idx);
+                    let btnStyle = isSelected ? 'bg-teal-500 text-white border border-teal-500' : 'bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100';
+                    if (examSubmitted) {
+                        if (isCorrect) btnStyle = 'bg-emerald-600 text-white border-2 border-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.5)] font-bold';
+                        else if (isSelected) btnStyle = 'bg-rose-600 text-white border-2 border-rose-400 font-bold';
+                        else btnStyle = 'bg-slate-100 text-slate-400 border border-slate-200 opacity-60';
+                    }
+                    bowtieHtml += `<button onclick="toggleBowtieSelection(${q.id}, 'monitors', ${idx})" ${examSubmitted ? 'disabled' : ''} class="w-full text-left text-sm p-3 rounded-xl font-medium transition duration-150 leading-relaxed ${btnStyle}">${mon}</button>`;
+                });
+                bowtieHtml += `</div></div>
+
+                    </div>
+                </div>`;
+                ws.innerHTML = bowtieHtml;
+
+            } else if (q.type === 'dropdown' || q.type === 'trend') {
+                let paragraph = `<div class="bg-slate-900 border border-slate-850 p-6 rounded-xl leading-loose text-slate-200 text-sm">`;
+                let rawText = q.dropdown.text;
+                
+                q.dropdown.menus.forEach((menu, mIdx) => {
+                    let selectHtml = `<select onchange="saveDropdownAnswer(${q.id}, ${mIdx}, this.value)" ${examSubmitted ? 'disabled' : ''} class="mx-1 bg-slate-950 border border-slate-800 text-teal-400 text-sm rounded-lg px-3 py-1.5 focus:ring-teal-500 inline-block font-semibold transition-all">`;
+                    selectHtml += `<option value="">-- Choose Option --</option>`;
+                    menu.forEach((opt, oIdx) => {
+                        const selected = ans && ans[mIdx] == oIdx ? 'selected' : '';
+                        selectHtml += `<option value="${oIdx}" ${selected}>${opt}</option>`;
+                    });
+                    selectHtml += `</select>`;
+
+                    if (examSubmitted) {
+                        const isCorrect = ans && ans[mIdx] == q.dropdown.correct[mIdx];
+                        const border = isCorrect ? 'border-2 border-emerald-500 bg-emerald-950/40 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'border-2 border-rose-500 bg-rose-950/40 text-rose-400';
+                        selectHtml = selectHtml.replace('class="', `class="${border} `);
+                    }
+
+                    rawText = rawText.replace(`[Drop-down ${mIdx + 1}]`, selectHtml);
+                });
+
+                paragraph += rawText + `</div>`;
+                ws.innerHTML = paragraph;
+
+            } else if (q.type === 'highlight') {
+                let block = `<div class="bg-slate-900 border border-slate-850 p-6 rounded-xl text-slate-200 text-sm leading-loose mb-4">`;
+                
+                q.highlight.segments.forEach((seg, sIdx) => {
+                    const isSelected = ans && ans.includes(sIdx);
+                    let styleClass = "cursor-pointer rounded border border-transparent px-1.5 py-0.5 hover:bg-slate-800 transition inline-block my-0.5";
+                    
+                    if (isSelected) {
+                        styleClass += " bg-teal-500/20 text-teal-300 border-teal-500/40 font-semibold";
+                    }
+
+                    if (examSubmitted) {
+                        const isCorrect = seg.isRedFlag;
+                        if (isCorrect) {
+                            styleClass = "bg-emerald-950/40 text-emerald-300 border-2 border-emerald-500 font-bold px-1.5 rounded shadow-[0_0_10px_rgba(16,185,129,0.3)] inline-block my-0.5";
+                        } else if (isSelected) {
+                            styleClass = "bg-rose-950/40 text-rose-300 border-2 border-rose-500 font-bold px-1.5 rounded inline-block my-0.5";
+                        } else {
+                            styleClass = "opacity-50 px-1.5 inline-block my-0.5";
+                        }
+                    }
+
+                    const clickAttr = examSubmitted ? '' : `onclick="toggleHighlightSegment(${q.id}, ${sIdx})"`;
+                    block += `<span ${clickAttr} class="${styleClass}">${seg.text}</span> `;
+                });
+                block += `</div>`;
+                ws.innerHTML = block;
+            }
+        }
+
+        function saveMatrixAnswer(qId, rIdx, cIdx) {
+            if (!userAnswers[qId]) userAnswers[qId] = {};
+            userAnswers[qId][rIdx] = cIdx;
+            renderNavigator();
+        }
+
+        function saveSataAnswer(qId, oIdx) {
+            if (!userAnswers[qId]) userAnswers[qId] = [];
+            const idx = userAnswers[qId].indexOf(oIdx);
+            if (idx > -1) {
+                userAnswers[qId].splice(idx, 1);
+            } else {
+                userAnswers[qId].push(oIdx);
+            }
+            if (userAnswers[qId].length === 0) delete userAnswers[qId];
+            renderNavigator();
+        }
+
+        function saveSelectNAnswer(qId, oIdx, limit) {
+            if (!userAnswers[qId]) userAnswers[qId] = [];
+            const idx = userAnswers[qId].indexOf(oIdx);
+            if (idx > -1) {
+                userAnswers[qId].splice(idx, 1);
+            } else {
+                if (userAnswers[qId].length >= limit) {
+                    showModal("Limit Exceeded", `You may only specify up to ${limit} choices. Deselect an option to toggle.`);
+                    return;
+                }
+                userAnswers[qId].push(oIdx);
+            }
+            if (userAnswers[qId].length === 0) delete userAnswers[qId];
+            renderNavigator();
+        }
+
+        function saveFillBlankAnswer(qId, val) {
+            userAnswers[qId] = val.trim();
+            if (userAnswers[qId] === '') delete userAnswers[qId];
+            renderNavigator();
+        }
+
+        function moveOrder(qId, currentPos, dir) {
+            const arr = userAnswers[qId];
+            const targetPos = currentPos + dir;
+            if (targetPos < 0 || targetPos >= arr.length) return;
+            
+            const temp = arr[currentPos];
+            arr[currentPos] = arr[targetPos];
+            arr[targetPos] = temp;
+            
+            loadQuestion(currentQuestionIdx);
+        }
+
+        function toggleHighlightSegment(qId, sIdx) {
+            if (!userAnswers[qId]) userAnswers[qId] = [];
+            const idx = userAnswers[qId].indexOf(sIdx);
+            if (idx > -1) {
+                userAnswers[qId].splice(idx, 1);
+            } else {
+                userAnswers[qId].push(sIdx);
+            }
+            if (userAnswers[qId].length === 0) delete userAnswers[qId];
+            loadQuestion(currentQuestionIdx);
+        }
+
+        function saveDropdownAnswer(qId, mIdx, val) {
+            if (!userAnswers[qId]) userAnswers[qId] = {};
+            userAnswers[qId][mIdx] = val;
+            
+            let empty = true;
+            for (let k in userAnswers[qId]) {
+                if (userAnswers[qId][k] !== "") empty = false;
+            }
+            if (empty) delete userAnswers[qId];
+            renderNavigator();
+        }
+
+        function toggleBowtieSelection(qId, key, idx) {
+            if (!userAnswers[qId]) userAnswers[qId] = { actions: [], condition: null, monitors: [] };
+            const arr = userAnswers[qId][key];
+            const arrIdx = arr.indexOf(idx);
+            if (arrIdx > -1) {
+                arr.splice(arrIdx, 1);
+            } else {
+                if (arr.length < 2) arr.push(idx);
+            }
+            loadQuestion(currentQuestionIdx);
+        }
+
+        function setBowtieCondition(qId, idx) {
+            if (!userAnswers[qId]) userAnswers[qId] = { actions: [], condition: null, monitors: [] };
+            userAnswers[qId].condition = userAnswers[qId].condition === idx ? null : idx;
+            loadQuestion(currentQuestionIdx);
+        }
+
+        function gradeQuestion(q, ans) {
+            let maxPoints = 0;
+            let earnedPoints = 0;
+
+            if (q.type === 'matrix') {
+                maxPoints = q.matrix.rows.length;
+                if (ans) {
+                    q.matrix.rows.forEach((row, rIdx) => {
+                        if (ans[rIdx] === q.matrix.correct[rIdx]) earnedPoints++;
+                    });
+                }
+            } else if (q.type === 'sata') {
+                const correctCount = q.sata.correct.filter(Boolean).length;
+                maxPoints = correctCount;
+                if (ans) {
+                    ans.forEach(optIdx => {
+                        if (q.sata.correct[optIdx]) earnedPoints++;
+                        else earnedPoints--; 
+                    });
+                }
+                if (earnedPoints < 0) earnedPoints = 0;
+            } else if (q.type === 'select_n') {
+                maxPoints = q.select_n.n;
+                if (ans) {
+                    ans.forEach(optIdx => {
+                        if (q.select_n.correct.includes(optIdx)) earnedPoints++;
+                    });
+                }
+            } else if (q.type === 'fill_blank') {
+                maxPoints = 1;
+                if (ans && String(ans).trim() === q.fill_blank.correct_answer) earnedPoints = 1;
+            } else if (q.type === 'ordered_response') {
+                maxPoints = 1;
+                if (ans) {
+                    let perfect = true;
+                    q.ordered_response.correct_order.forEach((correctIdx, pos) => {
+                        if (ans[pos] !== correctIdx) perfect = false;
+                    });
+                    if (perfect) earnedPoints = 1;
+                }
+            } else if (q.type === 'bowtie') {
+                maxPoints = 5;
+                if (ans) {
+                    if (ans.actions) {
+                        ans.actions.forEach(actIdx => {
+                            if (q.bowtie.correct.actions.includes(actIdx)) earnedPoints++;
+                        });
+                    }
+                    if (ans.condition === q.bowtie.correct.condition) earnedPoints++;
+                    if (ans.monitors) {
+                        ans.monitors.forEach(monIdx => {
+                            if (q.bowtie.correct.monitors.includes(monIdx)) earnedPoints++;
+                        });
+                    }
+                }
+            } else if (q.type === 'dropdown' || q.type === 'trend') {
+                maxPoints = q.dropdown.correct.length;
+                if (ans) {
+                    q.dropdown.correct.forEach((corrIdx, mIdx) => {
+                        if (ans[mIdx] == corrIdx) earnedPoints++;
+                    });
+                }
+            } else if (q.type === 'highlight') {
+                const totalCorrectHighlights = q.highlight.segments.filter(s => s.isRedFlag).length;
+                maxPoints = totalCorrectHighlights;
+                if (ans) {
+                    ans.forEach(sIdx => {
+                        if (q.highlight.segments[sIdx].isRedFlag) earnedPoints++;
+                        else earnedPoints--;
+                    });
+                }
+                if (earnedPoints < 0) earnedPoints = 0;
+            }
+
+            return {
+                earnedPoints,
+                maxPoints,
+                isCorrect: earnedPoints === maxPoints
+            };
+        }
+
+        function updateScoreDisplay() {
+            let totalMax = 0;
+            let totalEarned = 0;
+
+            examQuestions.forEach(q => {
+                const gradeObj = gradeQuestion(q, userAnswers[q.id]);
+                totalMax += gradeObj.maxPoints;
+                if (examSubmitted) totalEarned += gradeObj.earnedPoints;
+            });
+
+            document.getElementById('score-display').innerText = `${totalEarned} / ${totalMax} pts`;
+        }
+
+        function renderNavigator() {
+            const nav = document.getElementById('quick-navigator');
+            nav.innerHTML = '';
+            examQuestions.forEach((q, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `w-12 h-12 text-sm font-bold rounded-lg border transition duration-150 flex items-center justify-center ${getNavButtonClass(idx)}`;
+                btn.innerText = idx + 1;
+                btn.onclick = () => loadQuestion(idx);
+                nav.appendChild(btn);
+            });
+        }
+
+        function getNavButtonClass(idx) {
+            const qId = examQuestions[idx].id;
+            const isAnswered = userAnswers[qId] !== undefined;
+            
+            if (examSubmitted) {
+                const isCorrect = gradeQuestion(examQuestions[idx], userAnswers[qId]).isCorrect;
+                const isPartial = gradeQuestion(examQuestions[idx], userAnswers[qId]).earnedPoints > 0 && !isCorrect;
+                if (isCorrect) return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 hover:bg-emerald-500/30';
+                if (isPartial) return 'bg-amber-500/20 text-amber-400 border-amber-500/50 hover:bg-amber-500/30';
+                return 'bg-rose-500/20 text-rose-400 border-rose-500/50 hover:bg-rose-500/30';
+            }
+
+            if (idx === currentQuestionIdx) return 'bg-teal-500 text-slate-950 border-teal-500 font-black';
+            if (isAnswered) return 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-750';
+            return 'bg-slate-950 text-slate-500 border-slate-900 hover:bg-slate-900 hover:text-slate-300';
+        }
+
+        function prevQuestion() {
+            if (currentQuestionIdx > 0) loadQuestion(currentQuestionIdx - 1);
+        }
+
+        function nextQuestion() {
+            if (currentQuestionIdx < examQuestions.length - 1) loadQuestion(currentQuestionIdx + 1);
+        }
+
+        function displayRationale(q) {
+            const ans = userAnswers[q.id];
+            const gradeObj = gradeQuestion(q, ans);
+
+            const badge = document.getElementById('rationale-grade-badge');
+            if (gradeObj.isCorrect) {
+                badge.className = "inline-block bg-emerald-500/10 text-emerald-400 text-sm font-bold px-4 py-2 rounded-lg border border-emerald-500/20";
+                badge.innerHTML = `<i class="fa-solid fa-circle-check mr-1.5"></i> Correct: Earned ${gradeObj.earnedPoints}/${gradeObj.maxPoints} pts`;
+            } else {
+                badge.className = "inline-block bg-amber-500/10 text-amber-400 text-sm font-bold px-4 py-2 rounded-lg border border-amber-500/20";
+                badge.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1.5"></i> Earned ${gradeObj.earnedPoints}/${gradeObj.maxPoints} pts`;
+            }
+
+            document.getElementById('rationale-overview').innerHTML = q.rationale.overview;
+            document.getElementById('rationale-correct').innerHTML = q.rationale.correct;
+            document.getElementById('rationale-incorrect').innerHTML = q.rationale.incorrect;
+            document.getElementById('rationale-objective').innerHTML = q.rationale.objective;
+        }
+
+        async function askTutor() {
+            const input = document.getElementById('tutor-question-input');
+            const questionText = input.value.trim();
+            if (!questionText) return;
+
+            const storedKey = localStorage.getItem('gemini_api_key');
+            const apiKey = storedKey || "";
+            // FIX applied: Safely use the correct public model when user inputs their own API key.
+            const modelName = storedKey ? "gemini-1.5-flash" : "gemini-2.5-flash-preview-09-2025";
+
+            const q = examQuestions[currentQuestionIdx];
+            const qId = q.id;
+
+            if (!tutorChatHistories[qId]) tutorChatHistories[qId] = [];
+
+            tutorChatHistories[qId].push({ role: 'user', text: questionText });
+            input.value = '';
+            renderTutorChat(qId);
+
+            const btn = document.getElementById('ask-tutor-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+
+            try {
+                const historyContext = tutorChatHistories[qId].slice(0, -1).map(m => `${m.role === 'user' ? 'Student' : 'Tutor'}: ${m.text}`).join('\n');
+
+                const systemPrompt = `You are an expert NCLEX Nursing Educator. Your student is reviewing a specific question and has asked for clarification.
+Respond entirely in English to help them practice for the IELTS and US clinical environments. Be encouraging, clear, and professional.
+Here is the context of the exact NCLEX question they are asking about:
+- Type: ${q.type}
+- Prompt: ${q.prompt}
+- Rationale Overview: ${q.rationale.overview}
+- Correct Reasoning: ${q.rationale.correct}
+- Incorrect Reasoning: ${q.rationale.incorrect}
+
+Provide a helpful, educational response. Use simple HTML formatting like <strong> or <br> for readability if needed, but do not use markdown code blocks like \`\`\`html.`;
+
+                const userPromptText = `Previous Chat Context (if any):\n${historyContext}\n\nStudent's Latest Question: ${questionText}`;
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+                // FIX applied: separated the systemInstruction payload properly
+                const response = await fetchWithRetry(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        systemInstruction: { parts: [{ text: systemPrompt }] },
+                        contents: [{ parts: [{ text: userPromptText }] }]
+                    })
+                });
+
+                if (!response.ok) throw new Error(`API error ${response.status}`);
+                
+                const data = await response.json();
+                let aiResponseText = data.candidates[0].content.parts[0].text;
+                
+                aiResponseText = aiResponseText.replace(/```html/g, '').replace(/```/g, '').trim();
+
+                tutorChatHistories[qId].push({ role: 'ai', text: aiResponseText });
+            } catch (err) {
+                console.error(err);
+                tutorChatHistories[qId].push({ role: 'ai', text: `<span class="text-rose-400">Connection error: Could not reach the tutor. Error: ${err.message}</span>` });
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-paper-plane mr-2"></i> Ask';
+            renderTutorChat(qId);
+        }
+
+        function renderTutorChat(qId) {
+            const container = document.getElementById('tutor-chat-history');
+            container.innerHTML = '';
+            
+            const history = tutorChatHistories[qId] || [];
+            if (history.length === 0) {
+                container.innerHTML = '<p class="text-slate-500 italic text-center py-4">No questions asked yet. Feel free to ask the AI Tutor for clarification on this item!</p>';
+                return;
+            }
+
+            history.forEach(msg => {
+                const isUser = msg.role === 'user';
+                const alignment = isUser ? 'flex justify-end' : 'flex justify-start';
+                const bgClass = isUser ? 'bg-indigo-600/20 border-indigo-500/30 text-indigo-100' : 'bg-slate-800 border-slate-700 text-slate-200';
+                const icon = isUser ? '<i class="fa-solid fa-user-nurse text-indigo-400"></i>' : '<i class="fa-solid fa-chalkboard-user text-teal-400"></i>';
+                const name = isUser ? 'You (Student)' : 'AI Tutor';
+
+                let content = msg.text;
+                if (!content.includes('<br>') && !content.includes('<p>')) {
+                    content = content.replace(/\n/g, '<br>');
+                }
+
+                container.innerHTML += `
+                    <div class="${alignment} mb-4">
+                        <div class="max-w-[85%] p-4 rounded-xl border ${bgClass}">
+                            <div class="font-bold mb-2 text-xs uppercase tracking-wider flex items-center gap-2 opacity-80">
+                                ${icon} ${name}
+                            </div>
+                            <div class="leading-relaxed text-sm">
+                                ${content}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function showModal(title, text, confirmBtnText = "OK", onConfirm = null) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-text').innerText = text;
+            
+            const btnArea = document.getElementById('modal-buttons');
+            btnArea.innerHTML = '';
+            
+            if (onConfirm) {
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = "bg-slate-800 hover:bg-slate-750 text-slate-200 text-sm font-semibold px-5 py-2.5 rounded-xl transition";
+                cancelBtn.innerText = "Cancel";
+                cancelBtn.onclick = () => {
+                    document.getElementById('custom-modal').classList.add('hidden');
+                };
+                btnArea.appendChild(cancelBtn);
+            }
+
+            const actionBtn = document.createElement('button');
+            actionBtn.className = "bg-teal-500 hover:bg-teal-400 text-slate-950 text-sm font-black px-5 py-2.5 rounded-xl transition shadow-md";
+            actionBtn.innerText = confirmBtnText;
+            actionBtn.onclick = () => {
+                document.getElementById('custom-modal').classList.add('hidden');
+                if (onConfirm) onConfirm();
+            };
+            btnArea.appendChild(actionBtn);
+
+            document.getElementById('custom-modal').classList.remove('hidden');
+        }
+
+        function resetToGenerator() {
+            showModal(
+                "Start New Exam?", 
+                "This will clear your current exam progress and allow you to upload new study materials. Are you sure?",
+                "Yes, Clear Exam",
+                function() {
+                    document.getElementById('generator-panel').classList.remove('hidden');
+                    document.getElementById('exam-shell').classList.add('hidden');
+                    document.getElementById('placeholder-view').classList.remove('hidden');
+                    document.getElementById('new-exam-btn').classList.add('hidden');
+                    
+                    document.getElementById('material-input').value = "";
+                    document.getElementById('material-input').placeholder = "Or paste your disease summary, pharmacological guidelines, fluid and electrolyte charts, or clinical guidelines here...";
+                    document.getElementById('pdf-status').innerText = "";
+                    document.getElementById('score-display').innerText = "0 / 0 pts";
+                    
+                    hiddenPdfText = ""; 
+                    
+                    examQuestions = [];
+                    userAnswers = {};
+                    examSubmitted = false;
+                    currentQuestionIdx = 0;
+                    tutorChatHistories = {}; 
+                }
+            );
+        }
+
+        document.getElementById('submit-exam-btn').onclick = function() {
+            showModal(
+                "Submit Exam?", 
+                "Are you sure you want to lock in your clinical answers? You will unlock immediate detailed rationales.",
+                "Yes, Grade Exam",
+                function() {
+                    examSubmitted = true;
+                    updateScoreDisplay();
+                    loadQuestion(0);
+                    showModal(
+                        "Evaluation Complete!",
+                        "Your exam has been parsed successfully. Inspect each question to analyze UWorld-style feedback and detailed educational takeaways."
+                    );
+                }
+            );
+        };
+    </script>
+</body>
+</html>
