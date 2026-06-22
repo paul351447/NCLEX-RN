@@ -342,10 +342,10 @@
                     isCanvas: true
                 };
             } else {
-                // In Local/External HTML file: Use the user's provided key and public stable models
+                // In Local/External HTML file (like GitHub Pages): Use the most stable public models
                 return {
                     apiKey: storedKey || "",
-                    models: ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"], 
+                    models: ["gemini-1.5-flash", "gemini-2.0-flash-exp"], 
                     isCanvas: false
                 };
             }
