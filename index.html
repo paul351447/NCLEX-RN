@@ -345,7 +345,7 @@
                 // In Local/External HTML file (like GitHub Pages): Use the most stable public models
                 return {
                     apiKey: storedKey || "",
-                    models: ["gemini-1.5-flash", "gemini-2.0-flash-exp"], 
+                    models: ["gemini-1.5-flash", "gemini-2.5-flash"], 
                     isCanvas: false
                 };
             }
@@ -641,6 +641,7 @@ JSON Array Structure:
 
                 let rawResponse;
                 let lastErrorMsg = "";
+                let authError = "";
 
                 // Attempt fetching, supporting fallback models if running locally
                 for (const modelName of env.models) {
@@ -650,12 +651,16 @@ JSON Array Structure:
                         break; // Success!
                     } catch (err) {
                         console.warn(`Model ${modelName} failed:`, err.message);
+                        if (err.message.toLowerCase().includes('api key') || err.message.includes('API_KEY_INVALID') || err.message.includes('400')) {
+                            authError = "Your API Key is invalid or restricted. Please check your settings.";
+                            break;
+                        }
                         lastErrorMsg = err.message;
                     }
                 }
 
                 if (!rawResponse) {
-                    throw new Error(lastErrorMsg || "API completely rejected the request.");
+                    throw new Error(authError || lastErrorMsg || "API completely rejected the request.");
                 }
 
                 progressBar.style.width = "75%";
@@ -1396,6 +1401,7 @@ Provide a helpful, educational response. Use simple HTML formatting like <strong
 
                 let response;
                 let lastErrorMsg = "";
+                let authError = "";
 
                 for (const modelName of env.models) {
                     try {
@@ -1404,12 +1410,16 @@ Provide a helpful, educational response. Use simple HTML formatting like <strong
                         break;
                     } catch (err) {
                         console.warn(`Tutor model ${modelName} failed:`, err.message);
+                        if (err.message.toLowerCase().includes('api key') || err.message.includes('API_KEY_INVALID') || err.message.includes('400')) {
+                            authError = "Your API Key is invalid or restricted. Please check your settings.";
+                            break;
+                        }
                         lastErrorMsg = err.message;
                     }
                 }
 
                 if (!response) {
-                    throw new Error(lastErrorMsg || "Connection failed.");
+                    throw new Error(authError || lastErrorMsg || "Connection failed.");
                 }
 
                 const data = await response.json();
